@@ -1,0 +1,634 @@
+from machine import Pin, PWM, I2C , time_pulse_us
+import utime , time
+from ssd1306 import SSD1306_I2C
+import framebuf
+import freesans20
+import writer
+
+
+IRS_1=Pin(2,Pin.IN)
+IRS_2=Pin(3,Pin.IN)
+BUZZER=Pin(4,Pin.OUT)
+
+red1 = PWM(Pin(5))
+green1 = PWM(Pin(6))
+blue1 = PWM(Pin(7))
+
+red1.freq(1000)
+green1.freq(1000)
+blue1.freq(1000)
+
+red2 = PWM(Pin(8))
+green2 = PWM(Pin(9))
+blue2 = PWM(Pin(10))
+
+red2.freq(1000)
+green2.freq(1000)
+blue2.freq(1000)
+
+red3 = PWM(Pin(16))
+green3 = PWM(Pin(17))
+blue3 = PWM(Pin(18))
+
+red3.freq(1000)
+green3.freq(1000)
+blue3.freq(1000)
+
+mode_button=Pin(11,Pin.IN)
+
+m_mode_in=Pin(12,Pin.IN)
+m_mode_out=Pin(13,Pin.IN)
+
+RST_PIN=Pin(14,Pin.IN)
+
+# Initialize OLED Display
+WIDTH = 128
+HEIGHT = 64
+
+# Setup I2C connection
+i2c = I2C(0, scl=Pin(1), sda=Pin(0))
+
+# Initialize the OLED display
+oled = SSD1306_I2C(WIDTH, HEIGHT, i2c)
+
+BUZZER.value(0)
+count=0
+mode_selleceted=0
+# Higher resolution 8x16 bitmap font for digits 0-9
+large_font = {
+    '0': [
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+    ],
+    '1': [
+        0b00011000,
+        0b00111000,
+        0b01111000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b00011000,
+        0b01111110,
+        0b01111110,
+    ],
+    '2': [
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b00000011,
+        0b00000110,
+        0b00001100,
+        0b00011000,
+        0b00110000,
+        0b01100000,
+        0b11111111,
+        0b11111111,
+    ],
+    '3': [
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b00000011,
+        0b00000110,
+        0b00111100,
+        0b00000110,
+        0b00000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+    ],
+    '4': [
+        0b0000000110,
+        0b0000001110,
+        0b0000011110,
+        0b0000110110,
+        0b0001100110,
+        0b0011000110,
+        0b110000110,
+        0b1111111111,
+        0b1111111111,
+        0b0000000110,
+        0b0000000110,
+    ],
+    '5': [
+        0b11111111,
+        0b11111111,
+        0b11000000,
+        0b11000000,
+        0b11111100,
+        0b11111110,
+        0b00000110,
+        0b00000011,
+        0b00000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+    ],
+    '6': [
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b11000000,
+        0b11000000,
+        0b11111100,
+        0b11000110,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+    ],
+    '7': [
+        0b111111111,
+        0b111111111,
+        0b110000011,
+        0b000000011,
+        0b000000110,
+        0b000001100,
+        0b000011000,
+        0b000110000,
+        0b001100000,
+        0b01100000,
+    ],
+    '8': [
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+    ],
+    '9': [
+        0b00111100,
+        0b01100110,
+        0b11000011,
+        0b11000011,
+        0b11000011,
+        0b01111111,
+        0b00111111,
+        0b00000011,
+        0b11000011,
+        0b01100110,
+        0b00111100,
+    ],
+    '>': [
+        0b0000100,
+        0b0000010,
+        0b1111111,
+        0b0000010,
+        0b0000100,
+    ],
+    
+    '<': [
+        0b0010000,
+        0b0100000,
+        0b1111111,
+        0b0100000,
+        0b0010000,
+        ],
+    
+    '=': [
+        0b00100100,
+        0b01000010,
+        0b11111111,
+        0b01000010,
+        0b00100100,
+        ]
+    
+}
+
+
+# Function to display a large number with scaling
+def display_large_number(oled, number, x, y, size=3):
+    digits = str(number)
+    space = 4  # Space between digits
+
+    for index, digit in enumerate(digits):
+        display_large_digit(oled, digit, x + index * (8 * size + space), y, size)
+    
+
+# Function to display a large digit with scaling
+def display_large_digit(oled, digit, x, y, size=1):
+    if digit not in large_font:
+        return
+    
+    bitmap = large_font[digit]
+    
+    for row in range(len(bitmap)):
+        line = bitmap[row]
+        for col in range(8):  # 8 bits in each byte
+            if line & (1 << (7 - col)):  # Check each bit from MSB to LSB
+                # Scale the pixels based on the size parameter
+                for i in range(size):
+                    for j in range(size):
+                        oled.pixel(x + col * size + i, y + row * size + j, 1)
+            else:
+                # Ensure that we clear the pixels for empty spaces
+                for i in range(size):
+                    for j in range(size):
+                        oled.pixel(x + col * size + i, y + row * size + j, 0)
+                        
+                        
+def update_display(count):
+    oled.fill(0)  # Clear the screen
+    oled.text("Entery Count:", 0, 0)
+    if mode_selleceted==1:
+        display_large_number(oled, '>', 110, 0, size=2)
+    elif mode_selleceted==2:
+        display_large_number(oled, '<', 110, 0, size=2)
+    elif mode_selleceted==3:
+        oled.text("MID", 105, 0)
+    elif mode_selleceted==4:
+        oled.text("U->", 105, 0)
+    elif mode_selleceted==5:
+        oled.text("U<-", 105, 0)
+    elif mode_selleceted==6:
+        display_large_number(oled, '=', 110, 0, size=2)
+        
+        
+    if(count<10):
+        display_large_number(oled, count, 43, 18, size=4)  # Display the number
+    elif(count<100):
+        display_large_number(oled, count, 28, 18, size=4)  # Display the number
+    elif(count<1000):
+        display_large_number(oled, count, 12, 18, size=4)  # Display the number
+    elif(count<10000):
+        display_large_number(oled, count, 10, 20, size=3)  # Display the number
+    elif(count>10000):
+        display_large_number(oled, count, 0, 25, size=2)  # Display the number
+    elif(count>100000):
+        display_large_number(oled, count, 0, 33, size=1)  # Display the number
+    #oled.text("--->", 60, 55)
+    
+    oled.show()  # Update the OLED display
+
+def welcome_display():
+    oled.fill(0)
+   # oled.text("Passenger Counter", 0, 0)
+   # oled.text("Count:", 0, 20)
+    font_writer = writer.Writer(oled, freesans20)
+    font_writer.set_textpos(6, 25)
+    font_writer.printstring("WELCOME..!")
+    oled.show()
+    
+def RST_display():
+    oled.fill(0)
+   # oled.text("Passenger Counter", 0, 0)
+   # oled.text("Count:", 0, 20)
+    font_writer = writer.Writer(oled, freesans20)
+    font_writer.set_textpos(20, 10)
+    font_writer.printstring("SYSTEM")
+    font_writer.set_textpos(18, 35)
+    font_writer.printstring("RESTART")
+    oled.show()
+    
+def mode_display(str1,str2,x1,y1,x2,y2):
+    oled.fill(0)
+    #oled.text("Entery Counter", 8, 0)
+   # oled.text("Count:", 0, 20)
+    font_writer = writer.Writer(oled, freesans20)
+    font_writer.set_textpos(x1, y1)
+    font_writer.printstring(str1)
+    font_writer = writer.Writer(oled, freesans20)
+    font_writer.set_textpos(x2, y2)
+    font_writer.printstring(str2)
+    oled.show()
+    
+def mode_display_select(mode):
+    delay=2000
+    if mode==1:
+        mode_display("Bidirectional","Mode-I",9,10,30,35)
+        utime.sleep_ms(delay)
+    elif mode==2:
+        mode_display("Bidirectional","Mode-II",9,10,30,35)
+        utime.sleep_ms(delay)
+    elif mode==3:
+        mode_display("Manual Inc","Dec Mode",10,10,14,35)
+        utime.sleep_ms(delay)
+    elif mode==4:
+        mode_display("Unidirectional","Mode-I",8,10,30,35)
+        utime.sleep_ms(delay)
+    elif mode==5:
+        mode_display("Unidirectional","Mode-II",8,10,30,35)
+        utime.sleep_ms(delay)
+    elif mode==6:
+        mode_display("Bidirectional","Mode-III",9,10,27,35)
+        utime.sleep_ms(delay)
+        
+# Function to set RGB color
+def RGB_LED1(r, g, b):
+    red1.duty_u16(r*257)    
+    green1.duty_u16(g*257)  
+    blue1.duty_u16(b*257)   
+
+def RGB_LED2(r, g, b):
+    red2.duty_u16(r*257)    
+    green2.duty_u16(g*257)  
+    blue2.duty_u16(b*257)   
+    
+def RGB_LED3(r, g, b):
+    red3.duty_u16(r*257)    
+    green3.duty_u16(g*257)  
+    blue3.duty_u16(b*257)   
+
+
+long_press_duration_m = 1  # seconds
+button_pressed_time_m = 0
+long_press_done = False
+
+def select_mode():
+    global mode_selleceted
+    global long_press_duration_m   
+    global button_pressed_time_m
+    global long_press_done
+    
+    if mode_button.value() == 1:  # Button is pressed
+        if button_pressed_time_m == 0:  # Start timing the press
+            button_pressed_time_m = time.ticks_ms()
+
+        # Calculate how long the button has been pressed
+        press_duration = (time.ticks_ms() - button_pressed_time_m) / 1000
+
+        if press_duration > long_press_duration_m and mode_selleceted>0 and not long_press_done:
+            # Turn on the second LED for long press
+            mode_selleceted-=1
+            mode_display_select(mode_selleceted)
+            print("mode=",mode_selleceted)
+            long_press_done = True
+
+        
+            
+    else:
+        if button_pressed_time_m > 0:  # Button was released
+            press_duration = (time.ticks_ms() - button_pressed_time_m) / 1000
+
+            if press_duration < long_press_duration_m:
+                # Single press, turn on the first LED
+                if mode_selleceted==6:
+                    mode_selleceted=1
+                else:
+                    mode_selleceted+=1
+                    
+                print("mode=",mode_selleceted)
+                mode_display_select(mode_selleceted)
+                
+
+            button_pressed_time_m = 0  # Reset the timer
+            long_press_done = False
+
+
+long_press_duration = 2  # seconds
+button_pressed_time = 0
+def check_RST():
+    global count
+    global long_press_duration   
+    global button_pressed_time
+    
+    if RST_PIN.value() == 1:  # Button is pressed
+        if button_pressed_time == 0:  # Start timing the press
+            button_pressed_time = time.ticks_ms()
+
+        # Calculate how long the button has been pressed
+        press_duration = (time.ticks_ms() - button_pressed_time) / 1000
+
+        if press_duration > long_press_duration:
+            # Turn on the second LED for long press
+            RST_display()
+            utime.sleep_ms(1500)
+            machine.reset()
+            #update_display()
+    else:
+        if button_pressed_time > 0:  # Button was released
+            press_duration = (time.ticks_ms() - button_pressed_time) / 1000
+
+            if press_duration < long_press_duration:
+                # Single press, turn on the first LED
+                count=0
+                update_display(count)
+
+            button_pressed_time = 0  # Reset the timer
+            
+
+def counter_mode_1(IRS1,IRS2):
+    sensor1=IRS1.value()
+    sensor2=IRS2.value()
+    global count
+    if(sensor1==0 and sensor2==0):
+        BUZZER.value(1)
+        RGB_LED3(255,0,0)
+        print("Buzzer...")
+        while(1):
+            sensor1=IRS1.value()
+            sensor2=IRS2.value()
+            if(sensor1==1 or sensor2==1):
+                BUZZER.value(0)
+                RGB_LED3(0,0,0)
+                break;
+                
+    elif(sensor1==0):
+        while(1):
+            sensor1=IRS1.value()
+            if(sensor1==1):
+                utime.sleep_ms(3)
+                break
+        while True:
+            c=0
+            sensor2=IRS2.value()
+            if(sensor2==0):
+                while(1):
+                    sensor2=IRS2.value()
+                    if(sensor2==1):
+                        c=1
+                        count=count+1
+                        RGB_LED3(0,255,0)
+                        utime.sleep_ms(3)
+                        update_display(count)
+                        break
+            if(c==1):
+                break
+        
+            
+    elif(sensor2==0):
+        while(1):
+            sensor2=IRS2.value()
+            if(sensor2==1):
+                utime.sleep_ms(3)
+                break
+
+        while True:
+            c=0
+            sensor1=IRS1.value()
+            if(sensor1==0):
+                while(1):
+                    sensor1=IRS1.value()
+                    if(sensor1==1):
+                        c=1
+                        if count>0:
+                            count=count-1
+                            RGB_LED3(255,0,0)
+                            utime.sleep_ms(3)
+                            update_display(count)
+                        break
+            if(c==1):
+                break
+        
+
+def counter_mode_3():
+    global count
+    if m_mode_in.value()==1:
+        count+=1
+        RGB_LED3(0,255,0)
+        update_display(count)
+       
+       
+    if m_mode_out.value()==1 and count>0:
+        count-=1
+        RGB_LED3(255,0,0)
+        update_display(count)
+        
+        
+def counter_mode_4(IRS1,IRS2):
+    global count
+    sensor1=IRS1.value()
+    sensor2=IRS2.value()
+    
+    if(sensor1==0 and sensor2==0):
+        BUZZER.value(1)
+        RGB_LED3(255,0,0)
+        print("Buzzer...")
+        while(1):
+            sensor1=IRS1.value()
+            sensor2=IRS2.value()
+            if(sensor1==1 or sensor2==1):
+                BUZZER.value(0)
+                RGB_LED3(0,0,0)
+                break;
+                
+    elif(sensor1==0):
+        while(1):
+            sensor1=IRS1.value()
+            if(sensor1==1):
+                utime.sleep_ms(3)
+                break
+        while True:
+            c=0
+            sensor2=IRS2.value()
+            if(sensor2==0):
+                while(1):
+                    sensor2=IRS2.value()
+                    if(sensor2==1):
+                        c=1
+                        count=count+1
+                        RGB_LED3(0,255,0)
+                        utime.sleep_ms(3)
+                        update_display(count)
+                        break
+            if(c==1):
+                break
+        
+            
+    elif(sensor2==0):
+        while(1):
+            sensor2=IRS2.value()
+            if(sensor2==1):
+                utime.sleep_ms(3)
+                break
+
+        while True:
+            c=0
+            sensor1=IRS1.value()
+            if(sensor1==0):
+                while(1):
+                    sensor1=IRS1.value()
+                    if(sensor1==1):
+                        c=1
+                        if mode_selleceted==6:
+                            count=count+1
+                            RGB_LED3(0,255,0)
+                            utime.sleep_ms(3)
+                            update_display(count)
+                        break
+            if(c==1):
+                break
+        
+        
+    
+            
+
+    
+welcome_display()
+RGB_LED1(0,0,0)
+RGB_LED2(0,0,0)
+
+mode_selleceted = 0
+
+
+while(1):
+    
+    RGB_LED3(0,0,0)
+    check_RST()
+    select_mode()
+    
+    if mode_selleceted==0:
+        welcome_display()
+        RGB_LED1(0,0,0)
+        RGB_LED2(0,0,0)
+            
+    elif mode_selleceted==1:
+        update_display(count)
+        counter_mode_1(IRS_1,IRS_2)
+        RGB_LED1(255,0,0)
+        RGB_LED2(0,255,0)
+        
+    elif mode_selleceted==2:
+        update_display(count)
+        counter_mode_1(IRS_2,IRS_1)
+        RGB_LED2(255,0,0)
+        RGB_LED1(0,255,0)
+        
+    elif mode_selleceted==3:
+        update_display(count)
+        counter_mode_3();
+        RGB_LED2(0,255,255)
+        RGB_LED1(0,255,255)
+        
+    elif mode_selleceted==4:
+        update_display(count)
+        counter_mode_4(IRS_1,IRS_2);
+        RGB_LED1(255,0,0)
+        RGB_LED2(0,255,0)
+        
+    elif mode_selleceted==5:
+        update_display(count)
+        counter_mode_4(IRS_2,IRS_1);
+        RGB_LED1(0,255,0)
+        RGB_LED2(255,0,0)
+        
+    elif mode_selleceted==6:
+        update_display(count)
+        counter_mode_4(IRS_1,IRS_2);
+        RGB_LED1(0,0,255)
+        RGB_LED2(0,0,255)
+                   
+    #print(count)
+    
+    utime.sleep_ms(10)
+
+
