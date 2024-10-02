@@ -1,6 +1,8 @@
 from machine import Pin, PWM, I2C , time_pulse_us
 import utime , time
 from ssd1306 import SSD1306_I2C
+from oled.fonts import ubuntu_12, ubuntu_15
+from oled import Write
 import framebuf
 import freesans20
 import writer
@@ -275,19 +277,36 @@ def update_display(count):
         display_large_number(oled, count, 0, 25, size=2)  # Display the number
     elif(count>100000):
         display_large_number(oled, count, 0, 33, size=1)  # Display the number
-    #oled.text("--->", 60, 55)
-    
-    oled.show()  # Update the OLED display
+    oled.show()  
 
+delay=30
+text = "Mokhanes A, Aravinth Kumar C, Mathiyarsu M, Kavin Prabhu R. "  # Add space between repetitions
+text_width = len(text) * 8  # Calculate width of the text string in pixels
+position = 128  # Start text from the right edge of the display
 def welcome_display():
+    global delay
+    global text 
+    global text_width
+    global position
+    
     oled.fill(0)
-   # oled.text("Passenger Counter", 0, 0)
-   # oled.text("Count:", 0, 20)
     font_writer = writer.Writer(oled, freesans20)
-    font_writer.set_textpos(6, 25)
+    font_writer.set_textpos(6, 10)
     font_writer.printstring("WELCOME..!")
+    write = Write(oled, ubuntu_12)
+    write.text("Developed by,", 0, 34)
+    
+    write = Write(oled, ubuntu_15)
+    write.text(text, position, 48)
+    write.text(text, position + text_width, 48)
     oled.show()
     
+    position -= 8  # Move text to the left
+    if position < -text_width:  # When the first instance has fully moved off the screen
+        position = 0
+    #time.sleep_ms(delay)
+
+
 def RST_display():
     oled.fill(0)
    # oled.text("Passenger Counter", 0, 0)
@@ -301,8 +320,6 @@ def RST_display():
     
 def mode_display(str1,str2,x1,y1,x2,y2):
     oled.fill(0)
-    #oled.text("Entery Counter", 8, 0)
-   # oled.text("Count:", 0, 20)
     font_writer = writer.Writer(oled, freesans20)
     font_writer.set_textpos(x1, y1)
     font_writer.printstring(str1)
@@ -626,10 +643,10 @@ while(1):
         counter_mode_4(IRS_1,IRS_2);
         RGB_LED1(0,0,255)
         RGB_LED2(0,0,255)
-                   
+        
+            
     #print(count)
     
     utime.sleep_ms(10)
-
 
 
